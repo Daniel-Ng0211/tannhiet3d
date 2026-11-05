@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mô Hình 3D Khối Tản Nhiệt Cu-Al (Nhóm D8)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #1a1e24;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff;
+            user-select: none;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        #ui-panel {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(20, 25, 35, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 16px 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            max-width: 320px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        h2 {
+            margin: 0 0 5px 0;
+            font-size: 16px;
+            color: #38bdf8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        p {
+            margin: 4px 0 10px 0;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        .control-group {
+            margin-bottom: 12px;
+        }
+        label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        button {
+            flex: 1;
+            padding: 8px 12px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        #info-specs {
+            margin-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            padding-top: 8px;
+            font-size: 11px;
+            line-height: 1.5;
+            color: #cbd5e1;
+        }
+        #badge {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #64748b;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+    </style>
+    <!-- Thư viện Three.js và OrbitControls qua CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div id="ui-panel">
+        <h2>KHỐI TẢN NHIỆT Cu-Al</h2>
+        <p>Chuẩn kích thước thiết kế Nhóm D8 (mm)</p>
+        
+        <div class="control-group">
+            <label for="explodeRange">Độ giãn tách lớp (Exploded View): <span id="explodeVal">0%</span></label>
+            <input type="range" id="explodeRange" min="0" max="100" value="0">
+        </div>
+
+        <div class="control-group">
+            <label for="fanSpeed">Tốc độ quạt tản nhiệt:</label>
+            <input type="range" id="fanSpeed" min="0" max="50" value="20">
+        </div>
+
+        <div class="btn-group">
+            <button id="toggleRotate">Tự xoay 3D</button>
+            <button id="resetCam">Căn lại góc nhìn</button>
+        </div>
+
+        <div id="info-specs">
+            • <b>Đế Đồng (Cu):</b> 90×90×5 mm (k ≈ 385 W/mK)<br>
+            • <b>Keo TIM:</b> 70×70×0.1 mm (k ≈ 5 W/mK)<br>
+            • <b>Tấm + 10 Lá Nhôm (Al):</b> cao 25 mm, bước 7 mm (k ≈ 205)<br>
+            • <b>Quạt hướng trục:</b> 80×80×10 mm (7 cánh)
+        </div>
+    </div>
+
+    <div id="badge">Chuột trái: Xoay 3D | Lăn chuột: Zoom | Chuột phải: Di chuyển</div>
+
+    <script>
+        // 1. KHỞI TẠO SCENE, CAMERA, RENDERER
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x13171f);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+        camera.position.set(130, 110, 150);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.target.set(0, 20, 0);
+
+        // 2. HỆ THỐNG ÁNH SÁNG (STUDIO LIGHTING)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(80, 150, 100);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+
+        const fillLight = new THREE.DirectionalLight(0x90caf9, 0.6);
+        fillLight.position.set(-80, 50, -80);
+        scene.add(fillLight);
+
+        // Lưới sàn (Grid)
+        const gridHelper = new THREE.GridHelper(200, 20, 0x334155, 0x1e293b);
+        gridHelper.position.y = -5;
+        scene.add(gridHelper);
+
+        // 3. VẬT LIỆU (MATERIALS)
+        const copperMat = new THREE.MeshStandardMaterial({
+            color: 0xc86432,
+            metalness: 0.85,
+            roughness: 0.25
+        });
+
+        const timMat = new THREE.MeshStandardMaterial({
+            color: 0x94a3b8,
+            roughness: 0.8
+        });
+
+        const aluminumMat = new THREE.MeshStandardMaterial({
+            color: 0xd6dbe0,
+            metalness: 0.7,
+            roughness: 0.3
+        });
+
+        const fanHousingMat = new THREE.MeshStandardMaterial({
+            color: 0x1e293b,
+            roughness: 0.6
+        });
+
+        const fanBladeMat = new THREE.MeshStandardMaterial({
+            color: 0x0284c7,
+            roughness: 0.3,
+            metalness: 0.2
+        });
+
+        // 4. XÂY DỰNG CÁC TẦNG MÔ HÌNH THEO ĐÚNG THÔNG SỐ BẢN VẼ (Đơn vị: mm)
+        // Group chứa từng lớp để làm hiệu ứng tách lớp (Exploded View)
+        const groupCopper = new THREE.Group();
+        const groupTIM = new THREE.Group();
+        const groupAluminum = new THREE.Group();
+        const groupFan = new THREE.Group();
+
+        scene.add(groupCopper);
+        scene.add(groupTIM);
+        scene.add(groupAluminum);
+        scene.add(groupFan);
+
+        // --- TẦNG 1: ĐẾ ĐỒNG (90 x 90 x 5) ---
+        const copperGeo = new THREE.BoxGeometry(90, 5, 90);
+        const copperMesh = new THREE.Mesh(copperGeo, copperMat);
+        copperMesh.position.y = 2.5;
+        copperMesh.castShadow = true;
+        copperMesh.receiveShadow = true;
+        groupCopper.add(copperMesh);
+
+        // 4 lỗ bắt ốc Ø4.5, tâm cách nhau 74mm
+        const holeGeo = new THREE.CylinderGeometry(2.25, 2.25, 5.2, 16);
+        const holeMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+        const holePos = 74 / 2;
+        [[-holePos, -holePos], [holePos, -holePos], [-holePos, holePos], [holePos, holePos]].forEach(pos => {
+            const hole = new THREE.Mesh(holeGeo, holeMat);
+            hole.position.set(pos[0], 2.5, pos[1]);
+            groupCopper.add(hole);
+        });
+
+        // --- TẦNG 2: KEO TIM (70 x 70 x 0.1) --- (vẽ dày 0.4mm để mắt nhìn thấy rõ trên 3D)
+        const timGeo = new THREE.BoxGeometry(70, 0.4, 70);
+        const timMesh = new THREE.Mesh(timGeo, timMat);
+        timMesh.position.y = 5 + 0.2;
+        groupTIM.add(timMesh);
+
+        // --- TẦNG 3: ĐẾ NHÔM (70 x 70 x 3) + 10 LÁ NHÔM (70 x 2 x 25, bước lá 7mm, khe 5mm) ---
+        const alBaseGeo = new THREE.BoxGeometry(70, 3, 70);
+        const alBaseMesh = new THREE.Mesh(alBaseGeo, aluminumMat);
+        alBaseMesh.position.y = 5 + 0.4 + 1.5;
+        alBaseMesh.castShadow = true;
+        groupAluminum.add(alBaseMesh);
+
+        // Tạo 10 lá tản nhiệt
+        const finGeo = new THREE.BoxGeometry(2, 25, 70);
+        const startX = -((10 - 1) * 7) / 2; // Canh giữa đối xứng theo trục X
+        for (let i = 0; i < 10; i++) {
+            const fin = new THREE.Mesh(finGeo, aluminumMat);
+            fin.position.set(startX + i * 7, 5 + 0.4 + 3 + 12.5, 0);
+            fin.castShadow = true;
+            groupAluminum.add(fin);
+        }
+
+        // --- TẦNG 4: QUẠT HƯỚNG TRỤC (80 x 80 x 10, mở Ø72, 7 cánh) ---
+        // Khung quạt vuông
+        const fanFrameGeo = new THREE.BoxGeometry(80, 10, 80);
+        const fanFrameMesh = new THREE.Mesh(fanFrameGeo, fanHousingMat);
+        fanFrameMesh.position.y = 5 + 0.4 + 3 + 25 + 5;
+        fanFrameMesh.castShadow = true;
+        groupFan.add(fanFrameMesh);
+
+        // Lỗ tròn lồng quạt (Cắt thẩm mỹ bằng cylinder lồng)
+        const fanHoleGeo = new THREE.CylinderGeometry(36, 36, 10.2, 32);
+        const fanInnerMat = new THREE.MeshBasicMaterial({ color: 0x0b0f17 });
+        const fanHole = new THREE.Mesh(fanHoleGeo, fanInnerMat);
+        fanHole.position.y = fanFrameMesh.position.y;
+        groupFan.add(fanHole);
+
+        // Cụm cánh quạt quay (Rotor)
+        const rotorGroup = new THREE.Group();
+        rotorGroup.position.set(0, fanFrameMesh.position.y, 0);
+
+        // Trục giữa (Hub quạt)
+        const hubGeo = new THREE.CylinderGeometry(14, 14, 8, 24);
+        const hubMesh = new THREE.Mesh(hubGeo, fanBladeMat);
+        rotorGroup.add(hubMesh);
+
+        // 7 cánh quạt
+        const bladeGeo = new THREE.BoxGeometry(22, 1.2, 7);
+        for (let i = 0; i < 7; i++) {
+            const angle = (i / 7) * Math.PI * 2;
+            const blade = new THREE.Mesh(bladeGeo, fanBladeMat);
+            blade.position.set(Math.cos(angle) * 20, 0, Math.sin(angle) * 20);
+            blade.rotation.y = -angle;
+            blade.rotation.z = Math.PI / 6; // Độ nghiêng đón gió của cánh quạt
+            rotorGroup.add(blade);
+        }
+        groupFan.add(rotorGroup);
+
+        // 5. CẤU HÌNH TÁCH LỚP (EXPLODED VIEW)
+        const explodeSlider = document.getElementById('explodeRange');
+        const explodeVal = document.getElementById('explodeVal');
+        const fanSpeedSlider = document.getElementById('fanSpeed');
+
+        function updateExplosion() {
+            const factor = explodeSlider.value / 100;
+            explodeVal.innerText = `${explodeSlider.value}%`;
+
+            // Di chuyển các tầng dọc theo trục Y tách rời nhau
+            groupCopper.position.y = -factor * 25;
+            groupTIM.position.y = -factor * 5;
+            groupAluminum.position.y = factor * 20;
+            groupFan.position.y = factor * 55; // Quạt bay lên cao nhất như hình 01
+        }
+        explodeSlider.addEventListener('input', updateExplosion);
+
+        // Nút điều khiển
+        let autoRotate = false;
+        document.getElementById('toggleRotate').addEventListener('click', () => {
+            autoRotate = !autoRotate;
+            controls.autoRotate = autoRotate;
+            controls.autoRotateSpeed = 2.0;
+        });
+
+        document.getElementById('resetCam').addEventListener('click', () => {
+            camera.position.set(130, 110, 150);
+            controls.target.set(0, 20, 0);
+            controls.update();
+        });
+
+        // 6. VÒNG LẶP RENDER HOẠT ẢNH (ANIMATION LOOP)
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Chuyển động quay của cánh quạt
+            const speed = fanSpeedSlider.value * 0.005;
+            rotorGroup.rotation.y += speed;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // 7. RESPONSIVE WINDOW RESIZE
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
